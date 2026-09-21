@@ -1,97 +1,69 @@
-# Python Fireworks
+# Python Fireworks / 掌上烟花
 
-一个使用 **Python + pygame-ce** 实现的高级粒子烟花演示，同时支持桌面和手机浏览器。
+Python + pygame-ce 粒子烟花，保留桌面版，通过 Pygbag 在手机浏览器运行。
+`main` 为新版；原 C/C++ + EasyX 版本保留在 `master`。
 
-> `main` 分支为 Python 新版；原 EasyX / C++ 版本保留在 `master` 分支。
+## 手机怎么玩
 
-## 现在支持手机
+网站：<https://smallqi25.github.io/firework/>
 
-手机端不是把 Python 改成 JavaScript，而是通过 **Pygbag + WebAssembly** 让 Python/Pygame 代码直接运行在浏览器中。
+| 按钮 | 操作 |
+| --- | --- |
+| 爱心烟花 | 立即发射一枚爱心烟花，并选中爱心样式 |
+| 圆环烟花 | 立即发射一枚圆环烟花，并选中圆环样式 |
+| 垂柳烟花 | 立即发射一枚金色垂柳烟花，并选中垂柳样式 |
+| 自动：开启 / 自动：关闭 | 显示自动播放的当前状态，点击切换；关闭后仍可手动发射 |
+| 烟花齐放 | 同时发射一组不同样式的烟花 |
+| 横屏显示 / 退出横屏 | 切换页面横屏显示，不依赖系统自动旋转 |
 
-手机操作：
+点击样式按钮就会发射，不需要再点天空。选中后，点击天空指定下一枚的发射位置；自动播放也使用当前样式。尚未选择时自动随机播放。
 
-- 点击 / 触摸天空：在触摸位置发射烟花
-- `FINALE`：触发一轮大型烟花
-- `AUTO ON/OFF`：开启或关闭自动烟花
-- 建议手机横屏使用，视野更好
-- Android Chrome / Edge、iPhone Safari 均可使用现代浏览器访问
+### OPPO 等手机不能自动横屏
 
-程序同时做了移动端性能优化：Web 端会自动降低部分粒子数量并限制最大粒子数，在保持效果的同时降低手机 GPU / CPU 压力。
+先点底部的 **横屏显示**，再把手机横着拿。程序尝试浏览器全屏与方向锁定；不支持时使用页面内旋转，并修正触摸坐标。
+点击 **退出横屏** 恢复。此功能不会修改手机系统的自动旋转设置。
+竖屏也可操作，按钮分成两排；横屏宽度足够时为一排。
 
-## 烟花效果
+原生全屏、方向锁定能力因浏览器版本而异。页面内旋转是回退方案，不代表系统方向已经改变。尚未在所有 OPPO Reno 型号上进行真机测试。
 
-- 菊花、圆环、垂柳、棕榈、爱心 5 种形态
-- 粒子重力、空气阻力、速度衰减与自然下坠
-- 发射尾焰、闪烁火星、余烬与烟雾
-- 加色混合辉光
-- 星空和城市夜景
-- 爆炸镜头震动
-- 自动烟花秀
-- 鼠标 + 触摸双输入
-- 桌面窗口缩放 / 全屏
+中文按钮使用手机系统字体显示，不依赖 Pygame 默认英文字体，不额外下载字体文件。粒子仍由 Python 绘制，JavaScript 只负责网页按钮、布局、方向及输入。
 
 ## 桌面运行
 
-推荐 Python 3.10+。
+Python 3.10+：
 
 ```bash
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 python main.py
 ```
 
-桌面快捷键：
+鼠标点击发射；Space 烟花齐放；A 自动开关；R 清空；F11 全屏；Esc 退出。
+桌面 Pygame 原有画布控件保留，新的中文触摸面板用于浏览器版。
 
-| 操作 | 功能 |
-| --- | --- |
-| 鼠标左键 | 发射烟花 |
-| `Space` | 终场烟花 |
-| `A` | 自动烟花开关 |
-| `R` | 清空当前粒子 |
-| `F11` | 全屏 |
-| `Esc` | 退出 |
-
-## 本地测试手机版 / Web 版
-
-安装 Web 构建依赖：
+## 本地测试浏览器版
 
 ```bash
-pip install -r requirements-web.txt
-```
-
-启动 Pygbag：
-
-```bash
+python -m pip install -r requirements-web.txt
 python -m pygbag --ume_block 0 .
 ```
 
-然后在浏览器打开终端显示的本地地址。
+打开终端给出的地址。`main.py` 自动选择浏览器入口 `mobile.py`，复用 `fireworks.py`。
+`mobile_ui.py` 随应用打包，启动后注入中文操作面板。
 
-Pygbag 要求 Web 项目存在 `main.py`，并且主循环需要支持 async；本项目已经按这个方式处理好了。
+## 自动测试与部署
 
-## GitHub Pages
-
-仓库已经包含：
-
-```text
-.github/workflows/pages.yml
+```bash
+python -m unittest discover -s tests -v
 ```
 
-每次向 `main` 分支提交代码时，GitHub Actions 会自动：
+测试覆盖按钮与样式的映射、自动状态、爱心轮廓、快速点击限制、场景缩放和动画绘制。
+GitHub Actions 还会打开构建后的真实 WebAssembly 网页，测试中文按钮和横屏回退，再发布 Pages。
+仅当 `build` 和 `deploy` 都成功时，新版本才算发布。
 
-1. 安装 pygame-ce 和 pygbag
-2. 将 Python 烟花构建为 WebAssembly 网页
-3. 上传 GitHub Pages 构建产物
-4. 部署手机版网页
+首次启用：`Settings -> Pages -> Source -> GitHub Actions`。已启用后无需再配置。
+更新后看到旧按钮时，关闭旧标签页，再重新打开网站。
 
-如果仓库第一次使用 Pages，请在 GitHub 仓库中打开：
+## 保留效果
 
-`Settings -> Pages -> Build and deployment -> Source -> GitHub Actions`
-
-完成后，网页通常会使用：
-
-`https://smallqi25.github.io/firework/`
-
-## 分支
-
-- `main`：Python / pygame-ce，桌面 + 手机 Web 版
-- `master`：原 C/C++ + EasyX 版本
+菊花、圆环、垂柳、棕榈、爱心；重力、阻力、尾焰、余烬、烟雾、辉光、星空和城市剪影。
+移动端限制火箭及粒子总数；爱心保留参数曲线半径，不再将各方向归一化为近似圆形。
