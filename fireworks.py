@@ -1,24 +1,26 @@
 from __future__ import annotations
 
-import colorsys
 import math
 import random
+import sys
 from dataclasses import dataclass
 
 import pygame
 
-WIDTH = 1280
-HEIGHT = 720
+DESKTOP_SIZE = (1280, 720)
+WEB_SIZE = (960, 540)
 FPS = 60
 GRAVITY = 145.0
 AIR_DRAG = 0.992
+IS_WEB = sys.platform in {"emscripten", "wasi"}
 
 Color = tuple[int, int, int]
 
 
 def hsv(h: float, s: float = 1.0, v: float = 1.0) -> Color:
-    r, g, b = colorsys.hsv_to_rgb((h % 1.0), s, v)
-    return int(r * 255), int(g * 255), int(b * 255)
+    color = pygame.Color(0)
+    color.hsva = ((h % 1.0) * 360.0, s * 100.0, v * 100.0, 100.0)
+    return color.r, color.g, color.b
 
 
 def clamp(value: float, low: float, high: float) -> float:
@@ -44,15 +46,16 @@ class Spark:
         if self.life <= 0:
             return False
 
-        self.vel.x *= self.drag ** (dt * FPS)
-        self.vel.y *= self.drag ** (dt * FPS)
+        drag_factor = self.drag ** (dt * FPS)
+        self.vel.x *= drag_factor
+        self.vel.y *= drag_factor
         self.vel.y += self.gravity * dt
         self.pos += self.vel * dt
-        return self.pos.y < HEIGHT + 80
+        return self.pos.y < 900
 
     def draw(self, canvas: pygame.Surface, glow: pygame.Surface) -> None:
         ratio = clamp(self.life / self.max_life, 0.0, 1.0)
-        flicker = 0.55 + 0.45 * math.sin(self.life * 42.0 + self.pos.x)
+        flicker = 0.58 + 0.42 * math.sin(self.life * 42.0 + self.pos.x * 0.08)
         alpha = int(255 * ratio * (flicker if self.glitter else 1.0))
         if alpha <= 3:
             return
@@ -72,7 +75,6 @@ class Spark:
             )
 
         pygame.draw.circle(canvas, (*self.color, alpha), (px, py), radius)
-
         glow_radius = radius * (5 if self.ember else 3)
         pygame.draw.circle(
             glow,
@@ -101,8 +103,8 @@ class Smoke:
 
     def draw(self, canvas: pygame.Surface) -> None:
         ratio = clamp(self.life / self.max_life, 0.0, 1.0)
-        alpha = int(34 * ratio)
-        shade = int(60 + 70 * ratio)
+        alpha = int(32 * ratio)
+        shade = int(58 + 68 * ratio)
         pygame.draw.circle(
             canvas,
             (shade, shade, shade + 8, alpha),
@@ -112,27 +114,38 @@ class Smoke:
 
 
 class Rocket:
-    def __init__(self, x: float, target_y: float, hue: float, pattern: str):
-        self.pos = pygame.Vector2(x, HEIGHT + 8)
+    def __init__(
+        self,
+        x: float,
+        start_y: float,
+        target_y: float,
+        hue: float,
+        pattern: str,
+    ):
+        self.pos = pygame.Vector2(x, start_y)
         self.prev = self.pos.copy()
-        self.vel = pygame.Vector2(random.uniform(-24, 24), random.uniform(-610, -520))
+        self.vel = pygame.Vector2(random.uniform(-22, 22), random.uniform(-600, -515))
         self.target_y = target_y
         self.hue = hue
         self.color = hsv(hue, 0.5, 1.0)
         self.pattern = pattern
-        self.timer = 0.0
 
     def update(self, dt: float, trail: list[Spark], smoke: list[Smoke]) -> bool:
         self.prev = self.pos.copy()
-        self.timer += dt
         self.vel.y += 92.0 * dt
         self.pos += self.vel * dt
 
         for _ in range(2):
             trail.append(
                 Spark(
-                    pos=self.pos + pygame.Vector2(random.uniform(-2, 2), random.uniform(-2, 2)),
-                    vel=pygame.Vector2(random.uniform(-28, 28), random.uniform(70, 130)),
+                    pos=self.pos + pygame.Vector2(
+                        random.uniform(-2, 2),
+                        random.uniform(-2, 2),
+                    ),
+                    vel=pygame.Vector2(
+                        random.uniform(-28, 28),
+                        random.uniform(70, 130),
+                    ),
                     color=(255, random.randint(165, 225), 80),
                     life=random.uniform(0.20, 0.38),
                     max_life=0.38,
@@ -144,13 +157,16 @@ class Rocket:
                 )
             )
 
-        if random.random() < 0.16:
+        if random.random() < 0.11:
             smoke.append(
                 Smoke(
                     self.pos.copy(),
-                    pygame.Vector2(random.uniform(-7, 7), random.uniform(12, 25)),
-                    1.0,
-                    1.0,
+                    pygame.Vector2(
+                        random.uniform(-7, 7),
+                        random.uniform(12, 25),
+                    ),
+                    0.9,
+                    0.9,
                     random.uniform(2.0, 4.0),
                 )
             )
@@ -165,9 +181,9 @@ class Rocket:
             (int(self.pos.x), int(self.pos.y)),
             2,
         )
-        p = (int(self.pos.x), int(self.pos.y))
-        pygame.draw.circle(canvas, (255, 244, 205, 255), p, 3)
-        pygame.draw.circle(glow, (*self.color, 40), p, 18)
+        point = (int(self.pos.x), int(self.pos.y))
+        pygame.draw.circle(canvas, (255, 244, 205, 255), point, 3)
+        pygame.draw.circle(glow, (*self.color, 42), point, 18)
 
 
 class FireworkShow:
@@ -181,20 +197,21 @@ class FireworkShow:
         self.rockets: list[Rocket] = []
         self.sparks: list[Spark] = []
         self.smoke: list[Smoke] = []
-        self.stars = self._build_stars(150)
+        self.stars = self._build_stars(125 if IS_WEB else 165)
         self.elapsed = 0.0
         self.next_launch = 0.25
-        self.show_speed = 1.0
         self.autoplay = True
-        self.fullscreen = False
         self.shake = 0.0
         self.caption_alpha = 255.0
+        self.max_sparks = 2200 if IS_WEB else 4200
+        self.particle_scale = 0.72 if IS_WEB else 1.0
 
     def _build_stars(self, count: int) -> list[tuple[float, float, float, float]]:
+        width, height = self.size
         return [
             (
-                random.uniform(0, self.size[0]),
-                random.uniform(0, self.size[1] * 0.73),
+                random.uniform(0, width),
+                random.uniform(0, height * 0.73),
                 random.uniform(0.55, 1.55),
                 random.uniform(0, math.tau),
             )
@@ -206,7 +223,7 @@ class FireworkShow:
         self.size = screen.get_size()
         self.canvas = pygame.Surface(self.size, pygame.SRCALPHA)
         self.glow = pygame.Surface(self.size, pygame.SRCALPHA)
-        self.stars = self._build_stars(150)
+        self.stars = self._build_stars(125 if IS_WEB else 165)
 
     def launch(
         self,
@@ -216,36 +233,43 @@ class FireworkShow:
         hue: float | None = None,
     ) -> None:
         width, height = self.size
-        x = x if x is not None else random.uniform(width * 0.16, width * 0.84)
-        target_y = target_y if target_y is not None else random.uniform(height * 0.16, height * 0.53)
-        pattern = pattern or random.choice(self.PATTERNS)
-        hue = hue if hue is not None else random.random()
-        rocket = Rocket(x, target_y, hue, pattern)
-        rocket.pos.y = height + 8
-        self.rockets.append(rocket)
+        x = x if x is not None else random.uniform(width * 0.14, width * 0.86)
+        target_y = (
+            target_y
+            if target_y is not None
+            else random.uniform(height * 0.13, height * 0.54)
+        )
+        self.rockets.append(
+            Rocket(
+                x=x,
+                start_y=height + 8,
+                target_y=target_y,
+                hue=random.random() if hue is None else hue,
+                pattern=pattern or random.choice(self.PATTERNS),
+            )
+        )
 
     def finale(self) -> None:
         width, height = self.size
-        palette = random.random()
-        for i in range(9):
-            x = width * (0.10 + 0.10 * i) + random.uniform(-20, 20)
-            y = random.uniform(height * 0.12, height * 0.46)
+        count = 7 if IS_WEB else 9
+        base_hue = random.random()
+        for i in range(count):
+            x = width * ((i + 1) / (count + 1)) + random.uniform(-18, 18)
             self.launch(
                 x=x,
-                target_y=y,
+                target_y=random.uniform(height * 0.12, height * 0.46),
                 pattern=self.PATTERNS[i % len(self.PATTERNS)],
-                hue=palette + i * 0.075,
+                hue=base_hue + i * 0.075,
             )
-        self.shake = max(self.shake, 7.0)
+        self.shake = max(self.shake, 6.0)
 
     def burst(self, rocket: Rocket) -> None:
         center = rocket.pos.copy()
         hue = rocket.hue
-        pattern = rocket.pattern
 
-        if pattern == "ring":
+        if rocket.pattern == "ring":
             self._radial(center, hue, count=120, speed=(190, 245), ring=True)
-        elif pattern == "willow":
+        elif rocket.pattern == "willow":
             self._radial(
                 center,
                 hue,
@@ -256,9 +280,9 @@ class FireworkShow:
                 drag=0.986,
                 glitter=True,
             )
-        elif pattern == "palm":
+        elif rocket.pattern == "palm":
             self._palm(center, hue)
-        elif pattern == "heart":
+        elif rocket.pattern == "heart":
             self._heart(center, hue)
         else:
             self._radial(
@@ -270,7 +294,7 @@ class FireworkShow:
                 glitter=True,
             )
 
-        for _ in range(22):
+        for _ in range(16 if IS_WEB else 22):
             angle = random.uniform(0, math.tau)
             speed = random.uniform(25, 95)
             self.sparks.append(
@@ -288,17 +312,25 @@ class FireworkShow:
                 )
             )
 
-        for _ in range(9):
+        for _ in range(6 if IS_WEB else 9):
             self.smoke.append(
                 Smoke(
-                    center + pygame.Vector2(random.uniform(-5, 5), random.uniform(-5, 5)),
-                    pygame.Vector2(random.uniform(-18, 18), random.uniform(-12, 12)),
+                    center
+                    + pygame.Vector2(
+                        random.uniform(-5, 5),
+                        random.uniform(-5, 5),
+                    ),
+                    pygame.Vector2(
+                        random.uniform(-18, 18),
+                        random.uniform(-12, 12),
+                    ),
                     random.uniform(1.0, 1.8),
                     1.8,
                     random.uniform(5, 12),
                 )
             )
-        self.shake = max(self.shake, 3.6)
+
+        self.shake = max(self.shake, 3.2)
 
     def _radial(
         self,
@@ -313,11 +345,13 @@ class FireworkShow:
         ring: bool = False,
         glitter: bool = False,
     ) -> None:
+        count = max(24, int(count * self.particle_scale))
         for i in range(count):
             angle = (i / count) * math.tau + random.uniform(-0.018, 0.018)
             velocity = random.uniform(*speed)
             if not ring:
                 velocity *= random.uniform(0.55, 1.0)
+
             tint = hsv(
                 hue + random.uniform(-0.035, 0.035),
                 random.uniform(0.58, 0.95),
@@ -340,15 +374,21 @@ class FireworkShow:
             )
 
     def _palm(self, center: pygame.Vector2, hue: float) -> None:
-        arms = random.randint(9, 13)
+        arms = 9 if IS_WEB else random.randint(9, 13)
+        steps = 6 if IS_WEB else 8
+
         for i in range(arms):
             angle = (i / arms) * math.tau + random.uniform(-0.08, 0.08)
             speed = random.uniform(210, 285)
             base = pygame.Vector2(math.cos(angle), math.sin(angle)) * speed
-            for step in range(8):
+
+            for step in range(steps):
                 velocity = (
                     base * random.uniform(0.66, 1.0)
-                    + pygame.Vector2(random.uniform(-20, 20), random.uniform(-20, 20))
+                    + pygame.Vector2(
+                        random.uniform(-20, 20),
+                        random.uniform(-20, 20),
+                    )
                 )
                 spark_life = random.uniform(1.4, 2.4)
                 self.sparks.append(
@@ -366,8 +406,10 @@ class FireworkShow:
                 )
 
     def _heart(self, center: pygame.Vector2, hue: float) -> None:
-        for i in range(150):
-            t = math.tau * i / 150
+        count = 105 if IS_WEB else 150
+
+        for i in range(count):
+            t = math.tau * i / count
             x = 16 * math.sin(t) ** 3
             y = -(
                 13 * math.cos(t)
@@ -378,14 +420,21 @@ class FireworkShow:
             direction = pygame.Vector2(x, y)
             if direction.length_squared() > 0:
                 direction = direction.normalize()
-            speed = random.uniform(155, 235)
+
             spark_life = random.uniform(1.4, 2.1)
             self.sparks.append(
                 Spark(
                     center.copy(),
-                    direction * speed
-                    + pygame.Vector2(random.uniform(-8, 8), random.uniform(-8, 8)),
-                    hsv(hue + random.uniform(-0.025, 0.025), 0.66, 1.0),
+                    direction * random.uniform(155, 235)
+                    + pygame.Vector2(
+                        random.uniform(-8, 8),
+                        random.uniform(-8, 8),
+                    ),
+                    hsv(
+                        hue + random.uniform(-0.025, 0.025),
+                        0.66,
+                        1.0,
+                    ),
                     spark_life,
                     spark_life,
                     random.uniform(1.4, 2.5),
@@ -397,13 +446,13 @@ class FireworkShow:
 
     def update(self, dt: float) -> None:
         self.elapsed += dt
-        self.caption_alpha = max(0.0, self.caption_alpha - 24.0 * dt)
+        self.caption_alpha = max(0.0, self.caption_alpha - 20.0 * dt)
 
         if self.autoplay and self.elapsed >= self.next_launch:
             self.launch()
-            delay = random.uniform(0.34, 0.92) / self.show_speed
-            if random.random() < 0.18:
-                delay *= 0.45
+            delay = random.uniform(0.40, 0.96)
+            if random.random() < 0.16:
+                delay *= 0.48
             self.next_launch = self.elapsed + delay
 
         alive_rockets: list[Rocket] = []
@@ -416,13 +465,19 @@ class FireworkShow:
 
         self.sparks = [spark for spark in self.sparks if spark.update(dt)]
         self.smoke = [cloud for cloud in self.smoke if cloud.update(dt)]
+
+        if len(self.sparks) > self.max_sparks:
+            self.sparks = self.sparks[-self.max_sparks :]
+        if len(self.smoke) > 220:
+            self.smoke = self.smoke[-220:]
+
         self.shake *= 0.86 ** (dt * FPS)
 
     def _draw_background(self) -> None:
         width, height = self.size
         self.screen.fill((2, 3, 14))
 
-        bands = 24
+        bands = 20
         for i in range(bands):
             y0 = int(height * i / bands)
             y1 = int(height * (i + 1) / bands)
@@ -432,11 +487,19 @@ class FireworkShow:
                 int(3 + 5 * t),
                 int(14 + 15 * t),
             )
-            pygame.draw.rect(self.screen, color, (0, y0, width, y1 - y0 + 1))
+            pygame.draw.rect(
+                self.screen,
+                color,
+                (0, y0, width, y1 - y0 + 1),
+            )
 
         for x, y, size, phase in self.stars:
             twinkle = 0.45 + 0.55 * (
-                0.5 + 0.5 * math.sin(self.elapsed * (1.2 + size) + phase)
+                0.5
+                + 0.5
+                * math.sin(
+                    self.elapsed * (1.2 + size) + phase,
+                )
             )
             c = int(155 + 95 * twinkle)
             pygame.draw.circle(
@@ -456,21 +519,82 @@ class FireworkShow:
         skyline_rng = random.Random(12)
         x = 0
         while x < width:
-            w = skyline_rng.randint(22, 58)
-            h = skyline_rng.randint(18, 78)
+            building_width = skyline_rng.randint(22, 58)
+            building_height = skyline_rng.randint(18, 78)
             pygame.draw.rect(
                 self.screen,
                 (4, 5, 10),
-                (x, horizon - h, w, h),
+                (
+                    x,
+                    horizon - building_height,
+                    building_width,
+                    building_height,
+                ),
             )
-            for wy in range(horizon - h + 9, horizon - 4, 13):
-                if skyline_rng.random() < 0.30:
-                    pygame.draw.rect(
-                        self.screen,
-                        (35, 30, 18),
-                        (x + skyline_rng.randint(4, max(5, w - 7)), wy, 2, 4),
-                    )
-            x += w + skyline_rng.randint(2, 8)
+            x += building_width + skyline_rng.randint(2, 8)
+
+    def control_rects(self) -> dict[str, pygame.Rect]:
+        width, height = self.size
+        button_h = max(48, int(height * 0.09))
+        button_w = max(96, int(width * 0.12))
+        gap = max(10, int(width * 0.012))
+        margin = max(14, int(width * 0.018))
+        y = height - button_h - margin
+
+        auto_rect = pygame.Rect(
+            width - button_w - margin,
+            y,
+            button_w,
+            button_h,
+        )
+        finale_rect = pygame.Rect(
+            auto_rect.left - gap - button_w,
+            y,
+            button_w,
+            button_h,
+        )
+        return {
+            "finale": finale_rect,
+            "auto": auto_rect,
+        }
+
+    def _draw_touch_controls(self) -> None:
+        font_size = max(18, int(self.size[1] * 0.036))
+        font = pygame.font.Font(None, font_size)
+        rects = self.control_rects()
+
+        for name, rect in rects.items():
+            panel = pygame.Surface(rect.size, pygame.SRCALPHA)
+            active = name == "auto" and self.autoplay
+            fill = (46, 62, 110, 195) if active else (15, 18, 36, 180)
+            border = (166, 189, 255, 175)
+            pygame.draw.rect(
+                panel,
+                fill,
+                panel.get_rect(),
+                border_radius=15,
+            )
+            pygame.draw.rect(
+                panel,
+                border,
+                panel.get_rect(),
+                width=2,
+                border_radius=15,
+            )
+
+            label = (
+                "AUTO ON"
+                if name == "auto" and self.autoplay
+                else "AUTO OFF"
+                if name == "auto"
+                else "FINALE"
+            )
+            text = font.render(label, True, (242, 246, 255))
+            panel.blit(
+                text,
+                text.get_rect(center=panel.get_rect().center),
+            )
+            self.screen.blit(panel, rect.topleft)
 
     def draw(self) -> None:
         self._draw_background()
@@ -490,49 +614,79 @@ class FireworkShow:
             special_flags=pygame.BLEND_RGBA_ADD,
         )
         self.screen.blit(self.canvas, (0, 0))
+        self._draw_touch_controls()
 
         if self.caption_alpha > 2:
-            font = pygame.font.Font(None, 28)
-            small = pygame.font.Font(None, 22)
-            title = font.render(
+            title_font = pygame.font.Font(
+                None,
+                max(26, int(self.size[1] * 0.055)),
+            )
+            hint_font = pygame.font.Font(
+                None,
+                max(18, int(self.size[1] * 0.034)),
+            )
+
+            title = title_font.render(
                 "PYTHON FIREWORKS",
                 True,
                 (235, 240, 255),
             )
-            hint = small.render(
-                "Click: launch  •  Space: finale  •  A: autoplay  •  F11: fullscreen  •  Esc: quit",
+            hint_text = (
+                "Tap the sky to launch  •  FINALE for a big show  •  AUTO toggles autoplay"
+                if IS_WEB
+                else "Click: launch  •  Space: finale  •  A: autoplay  •  F11: fullscreen"
+            )
+            hint = hint_font.render(
+                hint_text,
                 True,
                 (158, 168, 196),
             )
             title.set_alpha(int(self.caption_alpha))
             hint.set_alpha(int(self.caption_alpha))
-            self.screen.blit(title, (28, 24))
-            self.screen.blit(hint, (28, 56))
+            self.screen.blit(title, (24, 20))
+            self.screen.blit(hint, (24, 58))
 
         if self.shake > 0.25:
-            dx = random.randint(-int(self.shake), int(self.shake))
-            dy = random.randint(-int(self.shake), int(self.shake))
+            radius = max(1, int(self.shake))
+            dx = random.randint(-radius, radius)
+            dy = random.randint(-radius, radius)
             snapshot = self.screen.copy()
             self.screen.fill((2, 3, 14))
             self.screen.blit(snapshot, (dx, dy))
 
-    def click_launch(self, pos: tuple[int, int]) -> None:
+    def pointer_down(self, pos: tuple[int, int]) -> None:
+        rects = self.control_rects()
+
+        if rects["finale"].collidepoint(pos):
+            self.finale()
+            return
+
+        if rects["auto"].collidepoint(pos):
+            self.autoplay = not self.autoplay
+            self.caption_alpha = 150.0
+            return
+
         x, y = pos
         target_y = clamp(
             y,
-            self.size[1] * 0.10,
-            self.size[1] * 0.62,
+            self.size[1] * 0.08,
+            self.size[1] * 0.66,
         )
         self.launch(x=x, target_y=target_y)
 
 
-def main() -> None:
+def create_display() -> pygame.Surface:
+    size = WEB_SIZE if IS_WEB else DESKTOP_SIZE
+    flags = pygame.DOUBLEBUF
+    if not IS_WEB:
+        flags |= pygame.RESIZABLE
+    return pygame.display.set_mode(size, flags)
+
+
+async def run() -> None:
     pygame.init()
-    pygame.display.set_caption("Python Fireworks — Advanced Particle Show")
-    screen = pygame.display.set_mode(
-        (WIDTH, HEIGHT),
-        pygame.RESIZABLE | pygame.DOUBLEBUF,
-    )
+    pygame.display.set_caption("Python Fireworks — Mobile & Desktop")
+    screen = create_display()
     clock = pygame.time.Clock()
     show = FireworkShow(screen)
 
@@ -543,14 +697,33 @@ def main() -> None:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
-            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                show.click_launch(event.pos)
-            elif event.type == pygame.VIDEORESIZE and not show.fullscreen:
+
+            elif event.type == pygame.FINGERDOWN:
+                width, height = show.size
+                show.pointer_down(
+                    (
+                        int(event.x * width),
+                        int(event.y * height),
+                    )
+                )
+
+            elif (
+                event.type == pygame.MOUSEBUTTONDOWN
+                and event.button == 1
+                and not getattr(event, "touch", False)
+            ):
+                show.pointer_down(event.pos)
+
+            elif (
+                event.type == pygame.VIDEORESIZE
+                and not IS_WEB
+            ):
                 screen = pygame.display.set_mode(
                     event.size,
                     pygame.RESIZABLE | pygame.DOUBLEBUF,
                 )
                 show.reset_surface(screen)
+
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     running = False
@@ -562,25 +735,34 @@ def main() -> None:
                     show.rockets.clear()
                     show.sparks.clear()
                     show.smoke.clear()
-                elif event.key == pygame.K_F11:
-                    show.fullscreen = not show.fullscreen
-                    flags = (
-                        pygame.FULLSCREEN | pygame.DOUBLEBUF
-                        if show.fullscreen
-                        else pygame.RESIZABLE | pygame.DOUBLEBUF
+                elif event.key == pygame.K_F11 and not IS_WEB:
+                    fullscreen = bool(
+                        pygame.display.get_surface().get_flags()
+                        & pygame.FULLSCREEN
                     )
-                    screen = pygame.display.set_mode(
-                        (0, 0) if show.fullscreen else (WIDTH, HEIGHT),
-                        flags,
-                    )
+                    if fullscreen:
+                        screen = pygame.display.set_mode(
+                            DESKTOP_SIZE,
+                            pygame.RESIZABLE | pygame.DOUBLEBUF,
+                        )
+                    else:
+                        screen = pygame.display.set_mode(
+                            (0, 0),
+                            pygame.FULLSCREEN | pygame.DOUBLEBUF,
+                        )
                     show.reset_surface(screen)
 
         show.update(dt)
         show.draw()
         pygame.display.flip()
 
+        if IS_WEB:
+            import asyncio
+            await asyncio.sleep(0)
+
     pygame.quit()
 
 
 if __name__ == "__main__":
-    main()
+    import asyncio
+    asyncio.run(run())
