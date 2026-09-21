@@ -10,7 +10,7 @@ BROWSER_UI = r"""
   const canvas = document.getElementById('canvas');
   if (!canvas) throw new Error('Firework canvas is missing');
   document.documentElement.lang = 'zh-CN';
-  document.title = '掌上烟花 · 触摸绽放';
+  document.title = '\u638c\u4e0a\u70df\u82b1 \u00b7 \u89e6\u6478\u7efd\u653e';
   document.querySelectorAll('meta[name="viewport"]').forEach(meta => meta.remove());
   const viewport = document.createElement('meta');
   viewport.name = 'viewport';
@@ -63,20 +63,20 @@ BROWSER_UI = r"""
   const app = document.createElement('main');
   app.id = 'fw-app';
   app.innerHTML = `
-    <section id="fw-stage" aria-label="烟花天空">
-      <div id="fw-sky" role="button" tabindex="0" aria-label="点击天空，在此位置发射烟花"></div>
-      <header id="fw-heading"><strong>掌上烟花</strong><span id="fw-current">点击按钮，即刻绽放</span></header>
+    <section id="fw-stage" aria-label="\u70df\u82b1\u5929\u7a7a">
+      <div id="fw-sky" role="button" tabindex="0" aria-label="\u70b9\u51fb\u5929\u7a7a\uff0c\u5728\u6b64\u4f4d\u7f6e\u53d1\u5c04\u70df\u82b1"></div>
+      <header id="fw-heading"><strong>\u638c\u4e0a\u70df\u82b1</strong><span id="fw-current">\u70b9\u51fb\u6309\u94ae\uff0c\u5373\u523b\u7efd\u653e</span></header>
     </section>
-    <section id="fw-controls" aria-label="烟花操作区">
+    <section id="fw-controls" aria-label="\u70df\u82b1\u64cd\u4f5c\u533a">
       <div id="fw-buttons">
-        <button type="button" data-pattern="heart" aria-pressed="false" disabled>爱心烟花</button>
-        <button type="button" data-pattern="ring" aria-pressed="false" disabled>圆环烟花</button>
-        <button type="button" data-pattern="willow" aria-pressed="false" disabled>垂柳烟花</button>
-        <button type="button" id="fw-auto" aria-pressed="true" disabled>自动：开启</button>
-        <button type="button" id="fw-finale" disabled>烟花齐放</button>
-        <button type="button" id="fw-landscape" aria-pressed="false">横屏显示</button>
+        <button type="button" data-pattern="heart" aria-pressed="false" disabled>\u7231\u5fc3\u70df\u82b1</button>
+        <button type="button" data-pattern="ring" aria-pressed="false" disabled>\u5706\u73af\u70df\u82b1</button>
+        <button type="button" data-pattern="willow" aria-pressed="false" disabled>\u5782\u67f3\u70df\u82b1</button>
+        <button type="button" id="fw-auto" aria-pressed="true" disabled>\u81ea\u52a8\uff1a\u5f00\u542f</button>
+        <button type="button" id="fw-finale" disabled>\u70df\u82b1\u9f50\u653e</button>
+        <button type="button" id="fw-landscape" aria-pressed="false">\u6a2a\u5c4f\u663e\u793a</button>
       </div>
-      <p id="fw-note" role="status" aria-live="polite">正在连接烟花引擎…</p>
+      <p id="fw-note" role="status" aria-live="polite">\u6b63\u5728\u8fde\u63a5\u70df\u82b1\u5f15\u64ce\u2026</p>
     </section>
   `;
   document.body.appendChild(app);
@@ -87,7 +87,7 @@ BROWSER_UI = r"""
   const current = document.getElementById('fw-current');
   const autoButton = document.getElementById('fw-auto');
   const landscapeButton = document.getElementById('fw-landscape');
-  const names = {heart:'爱心烟花', ring:'圆环烟花', willow:'垂柳烟花'};
+  const names = {heart:'\u7231\u5fc3\u70df\u82b1', ring:'\u5706\u73af\u70df\u82b1', willow:'\u5782\u67f3\u70df\u82b1'};
   const queue = [];
   let ready = false;
   let desiredLandscape = false;
@@ -117,7 +117,7 @@ BROWSER_UI = r"""
     const scale = Math.min(960 / sw, 800 / sh, Math.max(1, 540 / sw));
     renderWidth = Math.max(160, Math.round(sw * scale));
     renderHeight = Math.max(160, Math.round(sh * scale));
-    landscapeButton.textContent = desiredLandscape ? '退出横屏' : '横屏显示';
+    landscapeButton.textContent = desiredLandscape ? '\u9000\u51fa\u6a2a\u5c4f' : '\u6a2a\u5c4f\u663e\u793a';
     landscapeButton.setAttribute('aria-pressed', String(desiredLandscape));
   }
 
@@ -135,14 +135,14 @@ BROWSER_UI = r"""
       app.querySelectorAll('button:disabled').forEach(button => { button.disabled = false; });
       if (serialized === lastState) return;
       lastState = serialized;
-      autoButton.textContent = state.autoplay ? '自动：开启' : '自动：关闭';
+      autoButton.textContent = state.autoplay ? '\u81ea\u52a8\uff1a\u5f00\u542f' : '\u81ea\u52a8\uff1a\u5173\u95ed';
       autoButton.setAttribute('aria-pressed', String(Boolean(state.autoplay)));
-      autoButton.setAttribute('aria-label', state.autoplay ? '自动播放已开启，点击关闭' : '自动播放已关闭，点击开启');
+      autoButton.setAttribute('aria-label', state.autoplay ? '\u81ea\u52a8\u64ad\u653e\u5df2\u5f00\u542f\uff0c\u70b9\u51fb\u5173\u95ed' : '\u81ea\u52a8\u64ad\u653e\u5df2\u5173\u95ed\uff0c\u70b9\u51fb\u5f00\u542f');
       app.querySelectorAll('[data-pattern]').forEach(button => {
         button.setAttribute('aria-pressed', String(button.dataset.pattern === state.pattern));
       });
-      current.textContent = state.pattern ? '当前：' + names[state.pattern] : '当前：随机烟花';
-      note.textContent = '点按钮立即发射；点天空指定位置。自动播放使用当前样式。';
+      current.textContent = state.pattern ? '\u5f53\u524d\uff1a' + names[state.pattern] : '\u5f53\u524d\uff1a\u968f\u673a\u70df\u82b1';
+      note.textContent = '\u70b9\u6309\u94ae\u7acb\u5373\u53d1\u5c04\uff1b\u70b9\u5929\u7a7a\u6307\u5b9a\u4f4d\u7f6e\u3002\u81ea\u52a8\u64ad\u653e\u4f7f\u7528\u5f53\u524d\u6837\u5f0f\u3002';
       app.dataset.ready = 'true';
     }
   });
@@ -188,7 +188,7 @@ BROWSER_UI = r"""
     if (desiredLandscape) { await exitLandscape(); return; }
     desiredLandscape = true;
     layout();
-    note.textContent = '已切换横屏显示，请把手机横着拿；点击“退出横屏”可恢复。';
+    note.textContent = '\u5df2\u5207\u6362\u6a2a\u5c4f\u663e\u793a\uff0c\u8bf7\u628a\u624b\u673a\u6a2a\u7740\u62ff\uff1b\u70b9\u51fb\u201c\u9000\u51fa\u6a2a\u5c4f\u201d\u53ef\u6062\u590d\u3002';
     fullscreenBusy = true;
     try {
       const root = document.documentElement;
