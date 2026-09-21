@@ -35,7 +35,7 @@ jobs:
         run: python -m unittest discover -s tests -v
 
       - name: Build WebAssembly version
-        run: python -m pygbag --build --ume_block 0 --title "Python Fireworks" .
+        run: python -m pygbag --build --ume_block 0 --template web/pygbag-lite.tmpl --title "Python Fireworks" .
 
       - name: Install browser test tools
         run: |
